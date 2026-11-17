@@ -6,3 +6,5 @@ __pycache__/
 # Dữ liệu participant - loại video ra khỏi git (quá nặng, không nén tốt)
 participant_*/*.mp4
 participant_*/*.MP4
+
+recordings/
