@@ -156,13 +156,16 @@ IMPORTANT RULES:
   - Do NOT put the project inside OneDrive. The recordings are large (about
     90 MB per task) and OneDrive would try to upload all of them.
 
-Commands (replace the two web addresses with the real ones: on GitHub open
-each repository, click the green "Code" button and copy the HTTPS address):
+Commands (copy them exactly):
 
   > mkdir C:\eye-tracking
   > cd /d C:\eye-tracking
-  > git clone <ADDRESS-OF-eye-tracking-app>
-  > git clone <ADDRESS-OF-eye-tracking-integration>
+  > git clone https://github.com/quangphatmai/eye-tracking-web.git eye-tracking-app
+  > git clone https://github.com/quangphatmai/eye-tracking-integration.git
+
+NOTE: the web app repository is called "eye-tracking-web" on GitHub, but the
+folder MUST be called "eye-tracking-app" (start-helper.bat looks for that
+name). That is why the first command ends with  eye-tracking-app .
 
 The first time, a window asks you to sign in to GitHub. Sign in and allow it.
 If the repositories are private and you cannot sign in, ask the person who
