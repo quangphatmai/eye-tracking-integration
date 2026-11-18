@@ -1,0 +1,440 @@
+=============================================================================
+ EYE TRACKING SYSTEM - SETUP ON A NEW COMPUTER (Windows)
+=============================================================================
+
+Who this is for: anyone who has to install the eye tracking system on a
+computer that has never had it (for example the lab PC).
+
+What you will end up with:
+  - the web app (the pages the researcher and the participant see)
+  - the helper ("bridge"), a Python program that lets the web app talk to the
+    Tobii eye tracker, Chrome and the screen recorder
+  - one file, start-helper.bat, that starts everything with a double click
+
+How to read this file:
+  - Follow the steps IN ORDER. Do not skip a step.
+  - Text in a box like   > some command   is typed (or pasted) into a
+    "Command Prompt" window and finished with the Enter key.
+  - Every step ends with a CHECK line. If the check does not match, stop and
+    fix that step before going on.
+
+
+-----------------------------------------------------------------------------
+ BEFORE YOU START
+-----------------------------------------------------------------------------
+
+You need:
+  [ ] A Windows computer with administrator rights (to install programs)
+  [ ] An internet connection (the installs download about 1 to 2 GB)
+  [ ] The Tobii Pro Nano eye tracker and its USB cable
+  [ ] Two monitors (screen 1 = participant, screen 2 = researcher/admin)
+  [ ] A GitHub account that can see the two project repositories
+      (eye-tracking-app and eye-tracking-integration)
+
+How to open a Command Prompt (used in every step below):
+  1. Press the Windows key.
+  2. Type:  cmd
+  3. Press Enter. A black window opens. This is the Command Prompt.
+  (Use "Command Prompt", not "PowerShell". It avoids a permission problem.)
+
+
+-----------------------------------------------------------------------------
+ STEP 0 - ON THE OLD COMPUTER: WRITE DOWN THE PYTHON VERSION
+-----------------------------------------------------------------------------
+
+The project was built with one specific Python version. The new computer must
+use the same one.
+
+On the computer where the system already works:
+
+  > C:\pyenvs\eye-tracking-integration\venv\Scripts\python.exe --version
+
+You will see something like "Python 3.10.11". Write down the first two numbers
+(for example 3.10).
+
+Why this command: it asks the python inside the venv directly, so it gives the
+right answer in Command Prompt AND in PowerShell / the VS Code terminal.
+Do NOT run  python --version  after "activate.bat" in PowerShell: activate.bat
+does not turn the venv on in PowerShell, so you would see the version of
+another Python that is installed on the computer, which is the wrong one.
+
+This was checked on the original computer: its venv uses Python 3.10.11.
+If you cannot do this step, install Python 3.10.11 (any 3.10.x should work).
+
+CHECK: you have a version written down (called PYVER below, for example 3.10).
+
+
+-----------------------------------------------------------------------------
+ STEP 1 - INSTALL GIT
+-----------------------------------------------------------------------------
+
+Git downloads the project code from GitHub.
+
+  1. Open https://git-scm.com/download/win and download the installer.
+  2. Run it. Click "Next" on every page and keep the default choices.
+  3. Close and open a NEW Command Prompt after the install finishes.
+
+CHECK:
+  > git --version
+  It prints something like "git version 2.xx.x".
+
+
+-----------------------------------------------------------------------------
+ STEP 2 - INSTALL PYTHON (the version from step 0)
+-----------------------------------------------------------------------------
+
+  1. Open https://www.python.org/downloads/windows/
+  2. Find the release that starts with your PYVER (for example 3.10.11, the
+     version used on the original computer), choose "Windows installer
+     (64-bit)" and download it.
+  3. Run the installer.
+  4. On the FIRST page, tick the box "Add python.exe to PATH" (very important)
+     and tick "Use admin privileges when installing py.exe" if it is shown.
+  5. Click "Install Now" and wait. Click "Close" at the end.
+  6. Open a NEW Command Prompt.
+
+CHECK:
+  > py -0
+  The list must contain your version, for example "-V:3.10 ...".
+  If it says "py is not recognized", re-run the installer, choose "Modify",
+  and make sure the "py launcher" option is ticked.
+
+
+-----------------------------------------------------------------------------
+ STEP 3 - INSTALL GOOGLE CHROME
+-----------------------------------------------------------------------------
+
+The participant tasks and the web app both run in Google Chrome.
+
+  1. Open https://www.google.com/chrome/ and install Chrome.
+  2. Open Chrome once so it finishes its first start.
+  3. Do NOT change Chrome's zoom level and do not install extensions that
+     change web pages on this computer.
+
+CHECK: Chrome opens and you can load any web page.
+
+
+-----------------------------------------------------------------------------
+ STEP 4 - INSTALL THE TOBII SOFTWARE AND CONNECT THE EYE TRACKER
+-----------------------------------------------------------------------------
+
+  1. Install the Tobii software that was used on the old computer
+     (Tobii Pro Eye Tracker Manager). Use the same version if you know it.
+  2. Plug the Tobii Pro Nano into the USB port (use a USB port directly on
+     the computer, not a hub, if you can).
+  3. Open the Tobii software and check that the eye tracker is listed
+     as connected.
+
+CHECK: the Tobii software shows the eye tracker as connected.
+(The Python check for the tracker comes later, in step 9.)
+
+
+-----------------------------------------------------------------------------
+ STEP 5 - SET UP THE TWO MONITORS
+-----------------------------------------------------------------------------
+
+  1. Right-click the desktop -> "Display settings".
+  2. Choose "Extend these displays" (not "Duplicate").
+  3. Click the screen that the PARTICIPANT will look at and tick
+     "Make this my main display". This screen is "screen 1".
+  4. Screen 2 (researcher/admin) is the other one. The web app moves itself to
+     screen 2 before calibration.
+  5. Set the participant screen to the resolution of the old setup
+     (the lab screen is 1920 x 1200). Keep "Scale" the same as on the old
+     computer.
+
+CHECK: you can drag a window from one monitor to the other.
+
+
+-----------------------------------------------------------------------------
+ STEP 6 - DOWNLOAD THE PROJECT (both repositories)
+-----------------------------------------------------------------------------
+
+IMPORTANT RULES:
+  - Put the two folders NEXT TO EACH OTHER, in the same parent folder.
+  - Use a SHORT path without spaces, for example  C:\eye-tracking
+  - Do NOT put the project inside OneDrive. The recordings are large (about
+    90 MB per task) and OneDrive would try to upload all of them.
+
+Commands (replace the two web addresses with the real ones: on GitHub open
+each repository, click the green "Code" button and copy the HTTPS address):
+
+  > mkdir C:\eye-tracking
+  > cd /d C:\eye-tracking
+  > git clone <ADDRESS-OF-eye-tracking-app>
+  > git clone <ADDRESS-OF-eye-tracking-integration>
+
+The first time, a window asks you to sign in to GitHub. Sign in and allow it.
+If the repositories are private and you cannot sign in, ask the person who
+owns them to add your GitHub account.
+
+CHECK:
+  > dir C:\eye-tracking
+  You see two folders: eye-tracking-app and eye-tracking-integration.
+  > dir C:\eye-tracking\eye-tracking-integration
+  You see bridge, PyGazeAnalyser, requirements.txt and start-helper.bat.
+  (If start-helper.bat is missing, copy it from the old computer into this
+  folder. If PyGazeAnalyser is missing, copy that folder too.)
+
+
+-----------------------------------------------------------------------------
+ STEP 7 - CREATE THE PYTHON ENVIRONMENT (venv)
+-----------------------------------------------------------------------------
+
+A venv is a private box that holds the Python packages for this project, so
+they do not mix with anything else on the computer.
+
+The box must be at exactly this place (start-helper.bat looks for it here):
+
+  C:\pyenvs\eye-tracking-integration\venv
+
+Replace 3.10 below with your PYVER:
+
+  > mkdir C:\pyenvs
+  > py -3.10 -m venv C:\pyenvs\eye-tracking-integration\venv
+
+CHECK:
+  > dir C:\pyenvs\eye-tracking-integration\venv\Scripts\activate.bat
+  The file is listed.
+
+If you want the venv at another place, that is fine, but then you must edit
+the line  set "VENV=..."  at the top of start-helper.bat (see step 10).
+
+
+-----------------------------------------------------------------------------
+ STEP 8 - INSTALL THE PYTHON PACKAGES
+-----------------------------------------------------------------------------
+
+  1. "Turn on" the venv. Every new Command Prompt window needs this:
+
+     > C:\pyenvs\eye-tracking-integration\venv\Scripts\activate.bat
+
+     The line now starts with (venv). That means it is on.
+
+  2. Update pip (the installer):
+
+     > python -m pip install --upgrade pip
+
+  3. Install everything from the list:
+
+     > pip install -r C:\eye-tracking\eye-tracking-integration\requirements.txt
+
+     This takes 5 to 20 minutes and prints a lot of text. Do not close the
+     window. Wait until you get the prompt back.
+
+CHECK: the last lines say "Successfully installed ..." and there is no red
+"ERROR" text.
+
+IF IT FAILS:
+  - Read the LAST red lines. Note the name of the package that failed
+    (the ones that most often fail are wxPython, psychtoolbox, pyWinhook,
+    PyQt6 and pyparallel).
+  - "Microsoft Visual C++ 14.0 or greater is required": install
+    "Build Tools for Visual Studio" from
+    https://visualstudio.microsoft.com/visual-cpp-build-tools/
+    (choose "Desktop development with C++"), then run step 8.3 again.
+  - "No matching distribution found": the Python version is not the same as
+    on the old computer. Go back to step 0 and step 2.
+  - For any other error: copy the whole error text and send it to the person
+    maintaining the project. Do not delete packages from the list.
+
+
+-----------------------------------------------------------------------------
+ STEP 9 - CHECK THAT EVERYTHING WORKS
+-----------------------------------------------------------------------------
+
+With the venv turned on (step 8.1), run:
+
+  > python -c "import cv2, numpy, mss, tobii_research, titta, psychopy, selenium, websockets, imageio_ffmpeg, psutil; print('ALL PACKAGES OK')"
+
+It can take 20 to 60 seconds (PsychoPy is slow to load).
+CHECK: it prints  ALL PACKAGES OK  and no error.
+
+Now check the eye tracker (plug it in first):
+
+  > python -c "import tobii_research as tr; print(tr.find_all_eyetrackers())"
+
+CHECK: it prints a list with one device, like  (<tobii_research.EyeTracker ...>,)
+If it prints an empty list  ()  the computer does not see the tracker:
+check the USB cable, the Tobii software (step 4) and try another USB port.
+
+
+-----------------------------------------------------------------------------
+ STEP 10 - LOOK AT start-helper.bat
+-----------------------------------------------------------------------------
+
+start-helper.bat is in  C:\eye-tracking\eye-tracking-integration
+
+It must stay in the eye-tracking-integration folder, and eye-tracking-app must
+stay next to it (step 6). It finds everything from its own location.
+
+Only change it if your venv is not at the place in step 7:
+  1. Right-click start-helper.bat -> "Show more options" -> "Edit"
+     (or open it with Notepad).
+  2. Change the line   set "VENV=C:\pyenvs\eye-tracking-integration\venv"
+     to the real place. Save.
+
+Settings you will see at the top of the file:
+  VENV      where the venv is
+  WEB_PORT  5500 - the web app is served at http://127.0.0.1:5500/index.html
+  SITE_URL  leave EMPTY when the web app runs on this same computer.
+            Fill it only if the web app is hosted online (Netlify or Vercel).
+
+OPTIONAL - a shortcut on the desktop:
+  Right-click start-helper.bat -> "Show more options" -> "Send to" ->
+  "Desktop (create shortcut)". Always use a SHORTCUT, never a copy of the
+  file (a copy cannot find the other folders).
+
+
+-----------------------------------------------------------------------------
+ STEP 11 - FIRST RUN WITHOUT THE EYE TRACKER (test mode)
+-----------------------------------------------------------------------------
+
+This checks the web app and the helper without any hardware.
+
+  1. Open a Command Prompt:
+     > cd /d C:\eye-tracking\eye-tracking-integration
+     > start-helper.bat --mode mock
+  2. Wait about 4 seconds. Chrome opens http://127.0.0.1:5500/index.html
+     by itself. Two black windows stay open:
+        "Eye Tracking Helper" (keep it open)
+        "Eye Tracking Web"    (keep it open, you may minimize it)
+  3. In the helper window you see lines like "Bridge running ..." and, after
+     the page opens, "Website connected".
+
+CHECK: the home page of the web app (list of studies, "+ NEW STUDY" button)
+is visible in Chrome. The list is empty on a new computer: this is normal,
+the studies are saved inside the browser of each computer.
+
+To stop: click the "Eye Tracking Helper" window and press Ctrl+C (if it asks
+"Terminate batch job (Y/N)?" type Y and press Enter). The "Eye Tracking Web"
+window closes by itself.
+
+(In test mode there is no real gaze and no videos. That is expected.)
+
+
+-----------------------------------------------------------------------------
+ STEP 12 - FIRST REAL RUN WITH THE EYE TRACKER
+-----------------------------------------------------------------------------
+
+  1. Plug in the Tobii Pro Nano and check it in the Tobii software.
+  2. Double-click start-helper.bat (or the shortcut).
+  3. Chrome opens the web app. Create a test study:
+       "+ NEW STUDY" -> a project name, one task with a web address (URL),
+       a prompt, and a task duration -> Save.
+  4. On the study card click "Add Participant", fill in the form, accept the
+     consent page.
+  5. Calibration: the window moves to screen 2 (admin), the participant looks
+     at screen 1 and follows the dots.
+  6. Do the task. When it ends, the videos (heatmap and scanpath) are made
+     in the background and you can watch them in the review step.
+  7. Open "Results" on the study card and check the videos and comments.
+
+CHECK: heatmap and scanpath play in the Results page.
+Do this full test once BEFORE a real participant comes.
+
+
+-----------------------------------------------------------------------------
+ DAILY USE (every day after the setup)
+-----------------------------------------------------------------------------
+
+START:
+  1. Plug in the eye tracker.
+  2. Double-click start-helper.bat (or its desktop shortcut).
+  3. Wait for Chrome to open the web app.
+
+DURING A SESSION: do not close the black "Eye Tracking Helper" and
+"Eye Tracking Web" windows. Do not use the computer for other heavy work.
+
+FINISH:
+  1. Wait until the last task is done and its videos are ready.
+  2. Click the "Eye Tracking Helper" window, press Ctrl+C (answer Y).
+  3. Close Chrome. Then you can shut down the computer.
+  (If Chrome is closed first, nothing is lost. Just press Ctrl+C afterwards.)
+
+
+-----------------------------------------------------------------------------
+ WHERE THE DATA IS
+-----------------------------------------------------------------------------
+
+  - Studies, participants and comments: saved inside Chrome on THIS computer
+    (browser storage) at the address http://127.0.0.1:5500. Always open the
+    web app at exactly this address (not "localhost", not another port),
+    otherwise the studies will look empty. Clearing Chrome's browsing data
+    also clears the studies.
+  - Recordings and videos: in
+        C:\eye-tracking\eye-tracking-integration\recordings\
+    one folder per study / participant / task (raw recording, gaze data,
+    heatmap.mp4, scanpath.mp4). Back this folder up to a safe place.
+  - Participant data is confidential. Do not upload the recordings folder to
+    GitHub or share it without permission.
+
+
+-----------------------------------------------------------------------------
+ UPDATING THE CODE LATER
+-----------------------------------------------------------------------------
+
+When the code changes on GitHub, close the helper (Ctrl+C), then:
+
+  > cd /d C:\eye-tracking\eye-tracking-app
+  > git pull
+  > cd /d C:\eye-tracking\eye-tracking-integration
+  > git pull
+
+If requirements.txt changed, also run (venv turned on, see step 8.1):
+
+  > pip install -r requirements.txt
+
+In Chrome press Ctrl+F5 once so the new web pages are loaded.
+
+
+-----------------------------------------------------------------------------
+ TROUBLESHOOTING
+-----------------------------------------------------------------------------
+
+The page opens but says the helper is not running
+  -> The helper window is closed or crashed. Start start-helper.bat again,
+     then press "Retry" on the page.
+
+start-helper.bat says "Cannot find the Python environment"
+  -> The venv is not at the place written in the VENV line (step 7 / step 10).
+
+start-helper.bat says "Cannot find bridge_server.py"
+  -> The file was copied out of the eye-tracking-integration folder.
+     Use a shortcut instead (step 10).
+
+"Cannot find the site folder"
+  -> eye-tracking-app must be next to eye-tracking-integration (step 6).
+
+The "Eye Tracking Web" window shows an error about port 5500
+  -> Another program uses port 5500 (for example VS Code "Live Server").
+     Close it and start again.
+
+Chrome did not open
+  -> Open Chrome yourself and go to http://127.0.0.1:5500/index.html
+
+All the studies are gone
+  -> You opened a different address (for example localhost instead of
+     127.0.0.1, another port, or another browser such as Edge). Use exactly
+     http://127.0.0.1:5500/index.html in Chrome.
+
+Calibration fails / "eye tracker not found"
+  -> Check the USB cable, the Tobii software, and step 9 (the tracker check).
+     Close any other program that uses the eye tracker.
+
+The videos do not play in Results
+  -> The helper must be running (it serves the videos). Start it and reload
+     the page.
+
+A package is missing ("No module named ...")
+  -> The venv was not turned on, or step 8 was not finished. Turn it on
+     (step 8.1) and run step 8.3 again.
+
+Windows asks for permission to run a script
+  -> Use "Command Prompt" (cmd), not PowerShell.
+
+If nothing here helps: copy the full text of the error (right-click in the
+black window, "Select All", Enter) and send it with a short description of
+what you did just before.
+
+=============================================================================

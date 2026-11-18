@@ -11,9 +11,15 @@ import os
 import re
 import json
 import time
-import base64
 import threading
 import csv
+import subprocess
+import sys
+
+import numpy as np
+import cv2
+import mss
+import screeninfo
 
 import tobii_research as tr
 from titta import Titta
@@ -21,6 +27,8 @@ from psychopy import visual, core
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 user32 = ctypes.windll.user32
 SCREEN_W, SCREEN_H = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
@@ -30,6 +38,7 @@ TARGET_URL = "https://www.uvu.edu"
 SESSION_SECONDS = 60
 COUNTDOWN_SECONDS = 5
 TOBII_MODEL = "Tobii Pro Nano"
+RECORDING_FPS = 15
 
 def get_next_participant_id(base_dir="."):
     existing = [d for d in os.listdir(base_dir) if re.match(r"^participant_\d+$", d)]
@@ -54,14 +63,13 @@ options.add_experimental_option("useAutomationExtension", False)
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 driver.get("about:blank")
 
-# ================= 1. Calibration (vẫn dùng Titta — calibration áp dụng lên chính
-#      thiết bị phần cứng, không phụ thuộc việc sau đó ai subscribe dữ liệu) =================
+# ================= 1. Calibration =================
 settings = Titta.get_defaults(TOBII_MODEL)
 settings.N_CAL_TARGETS = 9
 tracker = Titta.Connect(settings)
 tracker.init()
 
-win = visual.Window(monitor="testMonitor", fullscr=True, units="pix", color=(-1, -1, -1))
+win = visual.Window(monitor="testMonitor", fullscr=True, units="pix", color=(0, 0, 0))
 tracker.calibrate(win)
 
 for pattern in ["*.cal", "*calibration_image*.png", "*validation_image*.png"]:
@@ -72,7 +80,7 @@ print(f"Đã lưu kết quả calibration vào: {calib_dir}/")
 # ================= 2. Màn hình đếm ngược =================
 instruction_text = visual.TextStim(
     win,
-    text="Task 1 sắp bắt đầu.\n\nKhi trang web hiện ra, hãy nhìn vào thanh điều hướng\n(nav bar) trên cùng trước tiên.",
+    text="Task 1 is about to start.\n\nPlease look around freely\n",
     color="white", height=36, wrapWidth=1000, pos=(0, 150),
 )
 countdown_text = visual.TextStim(win, text="", color="white", height=90, pos=(0, -100))
@@ -88,12 +96,21 @@ for remaining in range(COUNTDOWN_SECONDS, 0, -1):
 
 win.close()
 
-# ================= 3. Lấy eyetracker thô (tobii_research) để ghi bằng đồng hồ Python,
-#      KHÔNG qua tracker.save_data() nữa — tránh lệch đồng hồ thiết bị =================
+# ================= 2.5 Bật live overlay cho observer — CHỈ sau khi PsychoPy đã đóng hẳn =================
+monitors = screeninfo.get_monitors()
+if len(monitors) > 1:
+    websocket_proc = subprocess.Popen([sys.executable, os.path.join(SCRIPT_DIR, "step5_websocket_server.py")])
+    overlay_proc = subprocess.Popen([sys.executable, os.path.join(SCRIPT_DIR, "test_live_overlay.py")])
+    time.sleep(2)
+else:
+    websocket_proc = overlay_proc = None
+    print("Chỉ phát hiện 1 màn hình — bỏ qua live overlay (không cần cho máy 1 màn hình).")
+
+# ================= 3. Gaze logging — vẫn đồng hồ Python như cũ =================
 found = tr.find_all_eyetrackers()
 eyetracker = found[0]
 
-gaze_log = []   # mỗi phần tử: (elapsed_sec, lx, ly, lvalid, rx, ry, rvalid)
+gaze_log = []
 session_start = None
 
 def gaze_data_callback(gaze_data):
@@ -104,25 +121,70 @@ def gaze_data_callback(gaze_data):
     rvalid = gaze_data["right_gaze_point_validity"]
     gaze_log.append((t, lx, ly, lvalid, rx, ry, rvalid))
 
-# ================= 4. Scroll log song song =================
-scroll_log = []
+# ================= 4. Ghi màn hình song song =================
+video_path = os.path.join(output_dir, "session_recording.mp4")
+frame_log = []
 stop_flag = threading.Event()
+
+def record_screen():
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(video_path, fourcc, RECORDING_FPS,
+                                  (monitor["width"], monitor["height"]))
+        frame_interval = 1.0 / RECORDING_FPS
+        next_frame_time = session_start
+        while not stop_flag.is_set():
+            now = time.time()
+            if now >= next_frame_time:
+                img = np.array(sct.grab(monitor))
+                frame = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
+                writer.write(frame)
+                frame_log.append(now - session_start)
+                next_frame_time += frame_interval
+            else:
+                time.sleep(0.002)
+        writer.release()
+
+# ================= 5. Bắt đầu ghi =================
+session_start = time.time()
+eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, gaze_data_callback, as_dictionary=True)
+
+record_thread = threading.Thread(target=record_screen)
+record_thread.start()
+
+scroll_log = []  # (elapsed_sec, scroll_y) — vị trí cuộn trang theo thời gian
 
 def log_scroll():
     while not stop_flag.is_set():
         try:
-            y = driver.execute_script("return window.scrollY;")
-            scroll_log.append((time.time() - session_start, y))
+            scroll_y = driver.execute_script(
+                "return (window.pageYOffset || document.documentElement.scrollTop || 0) * (window.devicePixelRatio || 1);"
+)
+            scroll_log.append((time.time() - session_start, scroll_y))
         except Exception:
             pass
         time.sleep(0.1)
 
-# ================= 5. Bắt đầu ghi — TẤT CẢ cùng chung 1 đồng hồ Python =================
-session_start = time.time()
-eyetracker.subscribe_to(tr.EYETRACKER_GAZE_DATA, gaze_data_callback, as_dictionary=True)
-
 scroll_thread = threading.Thread(target=log_scroll)
 scroll_thread.start()
+
+nav_log = []  # (elapsed_sec, url) — ghi lại mỗi khi URL trang đổi (chuyển trang)
+
+def log_navigation():
+    last_url = None
+    while not stop_flag.is_set():
+        try:
+            current_url = driver.current_url
+            if current_url != last_url:
+                nav_log.append((time.time() - session_start, current_url))
+                last_url = current_url
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+nav_thread = threading.Thread(target=log_navigation)
+nav_thread.start()
 
 print("=== BẮT ĐẦU GHI — đang mở trang ===")
 driver.get(TARGET_URL)
@@ -132,68 +194,48 @@ time.sleep(SESSION_SECONDS)
 # ================= 6. Dừng ghi =================
 eyetracker.unsubscribe_from(tr.EYETRACKER_GAZE_DATA, gaze_data_callback)
 stop_flag.set()
+record_thread.join()
 scroll_thread.join()
+nav_thread.join()
+
+if overlay_proc:
+    overlay_proc.terminate()
+if websocket_proc:
+    websocket_proc.terminate()
 
 print(f"Đã ghi được {len(gaze_log)} mẫu gaze trong {gaze_log[-1][0]:.2f}s (đồng hồ Python)")
+if frame_log:
+    actual_fps = len(frame_log) / max(frame_log[-1], 0.001)
+    print(f"Đã ghi được {len(frame_log)} frame video ({actual_fps:.1f} fps thực tế)")
 
 with open(os.path.join(output_dir, "gaze_data.csv"), "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["elapsed_sec", "left_x", "left_y", "left_valid", "right_x", "right_y", "right_valid"])
     writer.writerows(gaze_log)
 
-# ================= 7. Đo DPR / sticky header =================
-dpr = driver.execute_script("return window.devicePixelRatio;")
-print(f"Device Pixel Ratio: {dpr}")
-
-header_height_css = driver.execute_script("""
-    const all = document.querySelectorAll('*');
-    let maxBottom = 0;
-    for (const el of all) {
-        const style = window.getComputedStyle(el);
-        if (style.position === 'fixed' || style.position === 'sticky') {
-            const rect = el.getBoundingClientRect();
-            if (rect.top <= 5 && rect.height > 0 && rect.height < 300) {
-                maxBottom = Math.max(maxBottom, rect.bottom);
-            }
-        }
-    }
-    return maxBottom;
-""")
-print(f"Vùng sticky/fixed (CSS px): {header_height_css}px")
-
-with open(os.path.join(output_dir, "screen_info.json"), "w") as f:
-    json.dump({
-        "SCREEN_W": SCREEN_W, "SCREEN_H": SCREEN_H,
-        "DPR": dpr, "HEADER_HEIGHT_CSS": header_height_css,
-    }, f)
-
-# ================= 8. Chụp ảnh toàn trang bằng CDP =================
-driver.execute_script("window.scrollTo(0, document.body.scrollHeight); window.dispatchEvent(new Event('scroll'));")
-time.sleep(2)
-driver.execute_script("window.scrollTo(0, 0); window.dispatchEvent(new Event('scroll'));")
-time.sleep(2)
-
-page_width = driver.execute_script("return document.documentElement.scrollWidth")
-page_height = driver.execute_script("return document.documentElement.scrollHeight")
-print(f"Kích thước trang (CSS px): {page_width}x{page_height}")
-
-driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
-    "width": page_width, "height": page_height,
-    "deviceScaleFactor": dpr, "mobile": False,
-})
-result = driver.execute_cdp_cmd("Page.captureScreenshot", {
-    "captureBeyondViewport": True, "format": "png",
-})
-with open(os.path.join(output_dir, "fullpage_screenshot.png"), "wb") as f:
-    f.write(base64.b64decode(result["data"]))
-
-driver.quit()
+with open(os.path.join(output_dir, "frame_log.csv"), "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["frame_index", "elapsed_sec"])
+    writer.writerows(enumerate(frame_log))
 
 with open(os.path.join(output_dir, "scroll_log.csv"), "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["elapsed_sec", "scrollY"])
+    writer.writerow(["elapsed_sec", "scroll_y"])
     writer.writerows(scroll_log)
+
+with open(os.path.join(output_dir, "nav_log.csv"), "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["elapsed_sec", "url"])
+    writer.writerows(nav_log)
+
+with open(os.path.join(output_dir, "screen_info.json"), "w") as f:
+    json.dump({"SCREEN_W": SCREEN_W, "SCREEN_H": SCREEN_H}, f)
+
+driver.quit()
 
 print(f"Xong. Dữ liệu lưu trong folder: {output_dir}/")
 print(f"  - gaze_data.csv ({len(gaze_log)} mẫu)")
-print(f"  - fullpage_screenshot.png ({page_width}x{page_height} CSS px, DPR {dpr})")
+print(f"  - session_recording.mp4 ({len(frame_log)} frames)")
+print(f"  - frame_log.csv (timestamp từng frame)")
+print(f"  - scroll_log.csv ({len(scroll_log)} mốc cuộn trang)")
+print(f"  - nav_log.csv ({len(nav_log)} lần chuyển trang)")
