@@ -8,3 +8,5 @@ participant_*/*.mp4
 participant_*/*.MP4
 
 recordings/
+
+participant_*/
