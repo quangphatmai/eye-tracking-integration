@@ -191,7 +191,10 @@ The box must be at exactly this place (start-helper.bat looks for it here):
 
   C:\pyenvs\eye-tracking-integration\venv
 
-Replace 3.10 below with your PYVER:
+This project uses Python 3.10, so type the two commands exactly as written.
+(The "3.10" in the second command tells Windows which Python to use. Only if
+you installed a different version, the PYVER you wrote down in step 0, for
+example 3.11, replace 3.10 with that version.)
 
   > mkdir C:\pyenvs
   > py -3.10 -m venv C:\pyenvs\eye-tracking-integration\venv
